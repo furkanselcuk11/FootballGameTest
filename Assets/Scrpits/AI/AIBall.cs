@@ -8,6 +8,8 @@ public class AIBall : MonoBehaviour
     [SerializeField] private Transform _playerAIBallPositon;
     private float _ballSpeed;
     private Vector3 _previousPosition;
+    [SerializeField] private float _fieldWith = 10f;
+    [SerializeField] private float _fieldLength= 10f;
 
     [SerializeField] private bool _stickToPlayer;    // oyuncuda ise
     [SerializeField] private float _distanceToPlayerAIStickMin = 0.45f;
@@ -35,7 +37,6 @@ public class AIBall : MonoBehaviour
             }
             else
             {
-                Debug.Log("Ball Move");
                 Vector2 currentPosition = new Vector2(transform.position.x, transform.position.z);
                 _ballSpeed = Vector2.Distance(currentPosition, _previousPosition) / Time.deltaTime;
 
@@ -67,10 +68,15 @@ public class AIBall : MonoBehaviour
     }
     public void BallResetPosition()
     {
-        transform.position = new Vector3(0f, 2f, 0f);
+        //transform.position = new Vector3(0f, 2f, 0f);
+
+        // Rastgele bir yeni pozisyon oluþtur
+        Vector3 randomPosition = new Vector3(Random.Range(-_fieldWith, _fieldWith), 2f, Random.Range(-_fieldWith, _fieldWith));
+        transform.position = randomPosition;  // Yeni pozisyona taþý
+
         Rigidbody rb = GetComponent<Rigidbody>();
         rb.velocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;        
     }
     public void BallToPlayerAINull()
     {

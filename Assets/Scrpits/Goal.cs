@@ -29,7 +29,15 @@ public class Goal : MonoBehaviour
         }
 
         if (other.CompareTag("AIBall"))
-        {            
+        {
+            if (name.Equals("GoalDetectorA"))
+            {
+                _scriptPlayer.IncreaseTeamBScore();
+            }
+            else
+            {
+                _scriptPlayer.IncreaseTeamAScore();
+            }
             other.GetComponent<AIBall>().BallResetPosition();
         }
     }
