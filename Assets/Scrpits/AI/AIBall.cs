@@ -8,8 +8,10 @@ public class AIBall : MonoBehaviour
     [SerializeField] private Transform _playerAIBallPositon;
     private float _ballSpeed;
     private Vector3 _previousPosition;
+    public float distanceToPlayerAI;
     [SerializeField] private float _fieldWith = 10f;
     [SerializeField] private float _fieldLength= 10f;
+    [SerializeField] private float _minYPosition = 0.61f;  // Alt sýnýr pozisyonu
 
     [SerializeField] private bool _stickToPlayer;    // oyuncuda ise
     [SerializeField] private float _distanceToPlayerAIStickMin = 0.45f;
@@ -17,17 +19,32 @@ public class AIBall : MonoBehaviour
 
     [SerializeField] private AudioSource _soundPole;
     public bool StickToPlayer { get => _stickToPlayer; set => _stickToPlayer = value; }
+    public Transform TransformPlayerAI { get => _transformPlayerAI; set => _transformPlayerAI = value; }
+
     void Start()
     {
         
     }
-    void Update()
+    private void Update()
+    {
+        BallYAxisLimit();
+    }
+
+    private void BallYAxisLimit()
+    {
+        // Topun Y eksenindeki pozisyonunu sýnýrla
+        Vector3 newPosition = transform.position;
+        newPosition.y = Mathf.Max(_minYPosition, newPosition.y);
+        transform.position = newPosition;
+    }
+
+    void FixedUpdate()
     {
         if (_transformPlayerAI != null)
         {
             if (!_stickToPlayer)
             {
-                float distanceToPlayerAI = Vector3.Distance(_transformPlayerAI.position, transform.position);
+                distanceToPlayerAI = Vector3.Distance(_transformPlayerAI.position, transform.position);
 
                 if (distanceToPlayerAI < _distanceToPlayerAIStickMin)
                 {
@@ -59,11 +76,25 @@ public class AIBall : MonoBehaviour
         {
             _soundPole.Play();
         }
-        if (collision.gameObject.CompareTag("AIPlayer"))
-        {
-            _transformPlayerAI = collision.gameObject.transform;
-            _playerAIBallPositon = _transformPlayerAI.Find("BallPosition");
-            _playerAI = _transformPlayerAI.GetComponent<AIController>();
+        if (collision.gameObject.CompareTag("TeamA") || collision.gameObject.CompareTag("TeamB") && this.gameObject.CompareTag("AIBall"))
+        {            
+            if (_playerAIBallPositon == null)
+            {
+                Rigidbody rb = GetComponent<Rigidbody>();
+                rb.velocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+
+                _transformPlayerAI = collision.gameObject.transform;
+                _playerAIBallPositon = _transformPlayerAI.Find("BallPosition");
+                _playerAI = _transformPlayerAI.GetComponent<AIController>();
+                _playerAI.PlayerToBallWaiting();
+            }
+            else
+            {
+                _transformPlayerAI = collision.gameObject.transform;
+                _playerAIBallPositon = _transformPlayerAI.Find("BallPosition");
+                _playerAI = _transformPlayerAI.GetComponent<AIController>();
+            }
         }
     }
     public void BallResetPosition()
@@ -71,7 +102,7 @@ public class AIBall : MonoBehaviour
         //transform.position = new Vector3(0f, 2f, 0f);
 
         // Rastgele bir yeni pozisyon oluþtur
-        Vector3 randomPosition = new Vector3(Random.Range(-_fieldWith, _fieldWith), 2f, Random.Range(-_fieldWith, _fieldWith));
+        Vector3 randomPosition = new Vector3(Random.Range(-_fieldWith, _fieldWith), 2f, Random.Range(-_fieldLength, _fieldLength));
         transform.position = randomPosition;  // Yeni pozisyona taþý
 
         Rigidbody rb = GetComponent<Rigidbody>();
@@ -82,5 +113,23 @@ public class AIBall : MonoBehaviour
     {
         _transformPlayerAI = null;
         _playerAIBallPositon = null;
+        BallTagChange(false);
+    }
+    private void BallTagChange(bool value)
+    {
+        if (value)
+        {
+            this.gameObject.tag = "AIBall";
+        }
+        else
+        {
+            this.gameObject.tag = "Untagged";
+            StartCoroutine(nameof(BallTagChangeCoroutine));
+        }
+    }
+    IEnumerator BallTagChangeCoroutine()
+    {
+        yield return new WaitForSeconds(0.1f);
+        BallTagChange(true);
     }
 }

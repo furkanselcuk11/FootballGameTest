@@ -9,6 +9,8 @@ TagManager:
   - Pole
   - AIPlayer
   - AIBall
+  - TeamA
+  - TeamB
   layers:
   - Default
   - TransparentFX

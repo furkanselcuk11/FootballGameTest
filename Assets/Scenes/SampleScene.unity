@@ -231,7 +231,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60
+  field of view: 40
   orthographic: 0
   orthographic size: 5
   m_Depth: 0
@@ -256,14 +256,14 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 21912190}
-  m_LocalRotation: {x: -0.21583518, y: 0.65921146, z: -0.20603196, w: -0.6902219}
-  m_LocalPosition: {x: 36.950977, y: 13.187601, z: -22.957249}
+  m_LocalRotation: {x: 0.12278779, y: -0.6963643, z: 0.12278779, w: 0.6963643}
+  m_LocalPosition: {x: 40, y: 10, z: -23}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 3
-  m_LocalEulerAnglesHint: {x: 12.72, y: -91.626, z: 0}
+  m_LocalEulerAnglesHint: {x: 20, y: -90, z: 0}
 --- !u!1 &33138890
 GameObject:
   m_ObjectHideFlags: 0
@@ -2468,7 +2468,7 @@ GameObject:
   - component: {fileID: 480406894}
   m_Layer: 0
   m_Name: Team_B_Player_1
-  m_TagString: AIPlayer
+  m_TagString: TeamB
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -2488,11 +2488,13 @@ MonoBehaviour:
   _ball: {fileID: 0}
   _targetPlayer: {fileID: 0}
   _gravityScale: 10
+  _maxYPositionPlayerAI: 1
   _moveSpeedMin: 0
   _moveSpeedMax: 0
+  _passDistance: 0.45
+  _minPassDistanceBetweenPlayerToTarget: 3
   _targetToPlayerDistanceMin: 10
   _targetToPlayerDistanceMax: 20
-  _passDistance: 0.45
   _shortPassPowerMin: 8
   _shortPassPowerMax: 12
   _shortPassHeightMin: 0
@@ -2505,11 +2507,13 @@ MonoBehaviour:
   _goal: {fileID: 906758491651921963}
   _shootDistanceMin: 5
   _shootDistanceMax: 30
-  _shootPowerMin: 10
+  _shootPowerMin: 20
   _shootPowerMax: 30
   _shootHeightMin: 0
-  _shootHeightMax: 8
-  _shootCheckInterval: 2
+  _shootHeightMax: 10
+  _shootCheckInterval: 0.5
+  _dribbleDistance: 40
+  _waitingDuration: 1
 --- !u!136 &480406895
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -2568,7 +2572,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 480406893}
   m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: 6.49, y: 0.5, z: -18.04}
+  m_LocalPosition: {x: 10.96, y: 0.5, z: -22.96}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2864,7 +2868,7 @@ GameObject:
   - component: {fileID: 548199362}
   m_Layer: 0
   m_Name: Team_A_Player
-  m_TagString: AIPlayer
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -7263,8 +7267,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _transformPlayerAI: {fileID: 0}
   _playerAIBallPositon: {fileID: 0}
+  distanceToPlayerAI: 0
   _fieldWith: 30
   _fieldLength: 20
+  _minYPosition: 0.61
   _stickToPlayer: 0
   _distanceToPlayerAIStickMin: 0.45
   _soundPole: {fileID: 1403347016}
@@ -8924,7 +8930,7 @@ GameObject:
   - component: {fileID: 1833824464}
   m_Layer: 0
   m_Name: Team_B_Player
-  m_TagString: AIPlayer
+  m_TagString: TeamB
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -9011,11 +9017,13 @@ MonoBehaviour:
   _ball: {fileID: 0}
   _targetPlayer: {fileID: 0}
   _gravityScale: 10
+  _maxYPositionPlayerAI: 1
   _moveSpeedMin: 3
   _moveSpeedMax: 7
+  _passDistance: 0.45
+  _minPassDistanceBetweenPlayerToTarget: 3
   _targetToPlayerDistanceMin: 10
   _targetToPlayerDistanceMax: 20
-  _passDistance: 0.45
   _shortPassPowerMin: 8
   _shortPassPowerMax: 12
   _shortPassHeightMin: 0
@@ -9033,6 +9041,8 @@ MonoBehaviour:
   _shootHeightMin: 0
   _shootHeightMax: 10
   _shootCheckInterval: 0.5
+  _dribbleDistance: 20
+  _waitingDuration: 1
 --- !u!1 &1836742564
 GameObject:
   m_ObjectHideFlags: 0
