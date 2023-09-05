@@ -1,6 +1,8 @@
+using Newtonsoft.Json;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using TMPro;
 using UnityEngine;
 
 public class AIController : MonoBehaviour
@@ -13,11 +15,15 @@ public class AIController : MonoBehaviour
     [SerializeField] private float _maxYPositionPlayerAI = 1.5f;
     private float _moveSpeed;
     [SerializeField] private float _moveSpeedMin = 2f;
-    [SerializeField] private float _moveSpeedMax = 7f;    
+    [SerializeField] private float _moveSpeedMax = 7f;
+    [Space]
+    [SerializeField] private LayerMask _groundLayer;
+    [SerializeField] private Transform _groundCheckTransform;
     [Space]
     [Header("Pass And Shoot Settings")]    
     [Header("Short Pass Settings")]
     [SerializeField] private float _passDistance = 0.5f;
+    [SerializeField] private float _passCheckInterval = 0.5f;
     [SerializeField] private float _minPassDistanceBetweenPlayerToTarget = 2f;
     [SerializeField] private float _targetToPlayerDistanceMin = 10f;
     [SerializeField] private float _targetToPlayerDistanceMax = 20f;
@@ -49,8 +55,14 @@ public class AIController : MonoBehaviour
     [SerializeField] private float _waitingDuration = 1f;
 
     private Rigidbody _rb;
+    private AIAnimatoinController _animController;
+
     private AIBall _ballAttachedToPlayer;   // Top oyuncuya baglý
     public AIBall BallAttachedToPlayer { get => _ballAttachedToPlayer; set => _ballAttachedToPlayer = value; }
+    private void Awake()
+    {
+        this._animController = this.GetComponent<AIAnimatoinController>();
+    }
     void Start()
     {
         _rb = GetComponent<Rigidbody>();
@@ -59,8 +71,14 @@ public class AIController : MonoBehaviour
         StartCoroutine(nameof(BallFind));   // Top arama
         StartCoroutine(nameof(SelectTargetPlayerAI)); // En yakýn oyuncu arama        
         StartCoroutine(CheckAndShootCoroutine());   // Sut kontol ve cekme
+        StartCoroutine(CheckAndPassCoroutine());   // Pass kontol ve pas verme
     }
     void Update()
+    {        
+        PlayerYAxisLimit();
+        LookTheBall();        
+    }
+    private void FixedUpdate()
     {
         // Eðer karakter yerde deðilse, yer çekimi uygula
         if (!IsGrounded())
@@ -68,13 +86,9 @@ public class AIController : MonoBehaviour
             Vector3 gravity = _gravityScale * Physics.gravity; // Yer çekimi kuvveti
             _rb.AddForce(gravity, ForceMode.Acceleration);
         }
-        PlayerYAxisLimit();
-
-        LookTheBall();
         if (!_isWaiting)
         {
             Move();
-            Pass();                   
         }
         else
         {
@@ -89,6 +103,7 @@ public class AIController : MonoBehaviour
         {
             Vector3 directionToBallWithDribble = _ball.position - transform.position;
             _rb.velocity = directionToBallWithDribble.normalized * _moveSpeed;
+            this._animController.MoveAnimPlay();    // Move Anim
         }
         else
         {
@@ -103,10 +118,12 @@ public class AIController : MonoBehaviour
             if (distanceToBall > _dribbleDistance)
             {
                 _rb.velocity = directionToBall.normalized * _moveSpeed;
+                this._animController.MoveAnimPlay();    // Move Anim
             }
             else
             {
                 _rb.velocity = Vector3.zero; // Dribbling mesafesine gelindiðinde dur
+                this._animController.IdleAnimPlay();    // Idle Anim
             }
         }
     }
@@ -151,56 +168,58 @@ public class AIController : MonoBehaviour
             }
         }
     }
-    void Pass()
+    private IEnumerator CheckAndPassCoroutine()
     {
-        if (_ball != null & _targetPlayer != null)
+        while (true)
         {
-            Vector3 directionToBall = _ball.position - transform.position;
-            float distanceToBall = directionToBall.magnitude;
-
-            Vector3 directionToTargetPlayer = _targetPlayer.position - transform.position;
-            float distanceToTargetPlayer = directionToTargetPlayer.magnitude;
-
-            if (distanceToBall <= _passDistance)
+            if (_ball != null && _ballAttachedToPlayer != null && _targetPlayer != null && CanPass())
             {
-                // Pas yap
-                _canPass = true;
-                if (distanceToTargetPlayer > _targetToPlayerDistanceMin && distanceToTargetPlayer < _targetToPlayerDistanceMax)
-                {
-                    // Uzun pas
-                    _isLongPass = true;
-                }
-                else if (distanceToTargetPlayer > _minPassDistanceBetweenPlayerToTarget && distanceToTargetPlayer < _targetToPlayerDistanceMin)
-                {
-                    // Kisa pas
-                    _isShortPass = true;
-                }
-                else
-                {
-                    _isLongPass = false;
-                    _isShortPass = false;
-                }
-                PerformPass();
+                // Belli aralýklar ile kontrol et ve þut çekileblir ise þut çek
+                Pass();
             }
+            yield return new WaitForSeconds(_passCheckInterval);
         }
     }
-    void PerformPass()
+    bool CanPass()
     {
-        if (_canPass && _ballAttachedToPlayer != null)
-        {
-            _ballAttachedToPlayer.StickToPlayer = false;
-            Rigidbody ballRigidbody = _ball.GetComponent<Rigidbody>();            
+        Vector3 directionToBall = _ball.position - transform.position;
+        float distanceToBall = directionToBall.magnitude;
 
-            if (_isLongPass)
-            {
-                Debug.Log("Uzun Pass");
-                PassToTarget(ballRigidbody, _longPassHeightMin, _longPassHeightMax, _longPassPowerMin, _longPassPowerMax);
-            }
-            else if (_isShortPass)
-            {
-                Debug.Log("Kisa Pass");
-                PassToTarget(ballRigidbody, _shortPassHeightMin, _shortPassHeightMax, _shortPassPowerMin, _shortPassPowerMax);
-            }
+        Vector3 directionToTargetPlayer = _targetPlayer.position - transform.position;
+        float distanceToTargetPlayer = directionToTargetPlayer.magnitude;
+
+        if (distanceToTargetPlayer > _targetToPlayerDistanceMin && distanceToTargetPlayer < _targetToPlayerDistanceMax)
+        {
+            // Uzun pas
+            _isLongPass = true;
+        }
+        else if (distanceToTargetPlayer > _minPassDistanceBetweenPlayerToTarget && distanceToTargetPlayer < _targetToPlayerDistanceMin)
+        {
+            // Kisa pas
+            _isShortPass = true;
+        }
+        else
+        {
+            _isLongPass = false;
+            _isShortPass = false;
+        }
+
+        return distanceToBall <= _passDistance;
+    }
+    void Pass()
+    {    
+        _ballAttachedToPlayer.StickToPlayer = false;
+        Rigidbody ballRigidbody = _ball.GetComponent<Rigidbody>();
+
+        if (_isLongPass)
+        {
+            Debug.Log("Uzun Pass");
+            PassToTarget(ballRigidbody, _longPassHeightMin, _longPassHeightMax, _longPassPowerMin, _longPassPowerMax);
+        }
+        else if (_isShortPass)
+        {
+            Debug.Log("Kisa Pass");
+            PassToTarget(ballRigidbody, _shortPassHeightMin, _shortPassHeightMax, _shortPassPowerMin, _shortPassPowerMax);
         }
     }
     void PassToTarget(Rigidbody ballRigidbody, float minHeight, float maxHeight, float minPower, float maxPower)
@@ -209,15 +228,17 @@ public class AIController : MonoBehaviour
         Vector3 directionToTarget = _targetPlayer.position - transform.position;
         directionToTarget.y = Random.Range(minHeight, maxHeight);
         float passPower = Random.Range(minPower, maxPower);
-        ballRigidbody.velocity = directionToTarget.normalized * passPower;
+
+        this._animController.PassAnimPlay();    // Pass Anim
+        ballRigidbody.velocity = directionToTarget.normalized * passPower;  // Pass 
 
         _isLongPass = false;
         _isShortPass = false;
         _canPass = false;
         _ballAttachedToPlayer = null;
-        _ball.GetComponent<AIBall>().BallToPlayerAINull();
+        _ball.GetComponent<AIBall>().BallToPlayerAINull();        
         PlayerWaiting();
-        StartCoroutine(nameof(SelectTargetPlayerAI));
+        StartCoroutine(nameof(SelectTargetPlayerAI));   // Test edilecek
     }
     private IEnumerator CheckAndShootCoroutine()
     {
@@ -231,22 +252,6 @@ public class AIController : MonoBehaviour
             yield return new WaitForSeconds(_shootCheckInterval);
         }
     }
-    void Shoot()
-    {
-        // Shoot mekaniði
-        Vector3 directionToGoal = _goal.position - _ball.position;
-        float distanceToBall = directionToGoal.magnitude;
-        directionToGoal.y = Random.Range(_shootHeightMin, _shootHeightMax);
-        float shootPower = Random.Range(_shootPowerMin, _shootPowerMax);
-
-        Debug.Log("SHOOT - UZAKLIK: " + distanceToBall);
-        _ball.GetComponent<Rigidbody>().velocity = directionToGoal.normalized * shootPower;
-
-        _ballAttachedToPlayer.StickToPlayer = false;
-        _ballAttachedToPlayer = null;
-        _ball.GetComponent<AIBall>().BallToPlayerAINull();
-        PlayerWaiting();
-    }
     bool CanShoot()
     {
         Vector3 directionToGoal = _goal.position - _ball.position;
@@ -255,6 +260,23 @@ public class AIController : MonoBehaviour
         float shootDistance = Random.Range(_shootDistanceMin, _shootDistanceMax);
         return distanceToBall < shootDistance;
     }
+    void Shoot()
+    {
+        // Shoot mekaniði
+        Vector3 directionToGoal = _goal.position - _ball.position;
+        float distanceToBall = directionToGoal.magnitude;
+        directionToGoal.y = Random.Range(_shootHeightMin, _shootHeightMax);
+        float shootPower = Random.Range(_shootPowerMin, _shootPowerMax);
+        
+        this._animController.ShootAnimPlay();   // Shoot Anim
+        Debug.Log("SHOOT - UZAKLIK: " + distanceToBall);
+        _ball.GetComponent<Rigidbody>().velocity = directionToGoal.normalized * shootPower; // Shoot
+
+        _ballAttachedToPlayer.StickToPlayer = false;
+        _ballAttachedToPlayer = null;
+        _ball.GetComponent<AIBall>().BallToPlayerAINull();
+        PlayerWaiting();
+    }    
     bool IsBallWithOpponent()
     {
         // Burada topun nerede olduðunu ve kimin kontrolünde olduðunu belirleyen bir mekanizma olmalýdýr.(A takýmý B takýmý)
@@ -315,7 +337,7 @@ public class AIController : MonoBehaviour
         // Karakterin yerde olup olmadýðýný kontrol et
         RaycastHit hit;
         float raycastDistance = 0.1f; // Yer kontrolü için raycast mesafesi
-        return Physics.Raycast(transform.position, Vector3.down, out hit, raycastDistance);
+        return Physics.Raycast(_groundCheckTransform.position, Vector3.down, out hit, raycastDistance,_groundLayer);
     }
     private void PlayerYAxisLimit()
     {
@@ -331,6 +353,7 @@ public class AIController : MonoBehaviour
         _ball = null;
         _rb.velocity = Vector3.zero;
         _rb.angularVelocity = Vector3.zero;
+        this._animController.IdleAnimPlay();    // Idle Anim
         StartCoroutine(nameof(BallFind));
     }
     public void PlayerToBallWaiting()
@@ -339,6 +362,7 @@ public class AIController : MonoBehaviour
         _isWaiting = true;
         _rb.velocity = Vector3.zero;
         _rb.angularVelocity = Vector3.zero;
+        this._animController.IdleAnimPlay();    // Idle Anim
         StartCoroutine(nameof(PlayerÝsWaiting));
     }
     IEnumerator BallFind()
