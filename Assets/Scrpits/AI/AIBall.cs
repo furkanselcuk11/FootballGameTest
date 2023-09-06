@@ -76,7 +76,7 @@ public class AIBall : MonoBehaviour
         {
             _soundPole.Play();
         }
-        if (collision.gameObject.CompareTag("TeamA") || collision.gameObject.CompareTag("TeamB") && this.gameObject.CompareTag("AIBall"))
+        if (collision.gameObject.CompareTag("AIPlayer") && this.gameObject.CompareTag("AIBall"))//collision.gameObject.CompareTag("TeamA") || collision.gameObject.CompareTag("TeamB")
         {            
             if (_playerAIBallPositon == null)
             {
@@ -129,7 +129,7 @@ public class AIBall : MonoBehaviour
     }
     IEnumerator BallTagChangeCoroutine()
     {
-        yield return new WaitForSeconds(0.1f);
+        yield return new WaitForSeconds(0.05f);
         BallTagChange(true);
     }
 }

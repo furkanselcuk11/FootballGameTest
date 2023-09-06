@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class Goal : MonoBehaviour
-{
-    [SerializeField] private Player _scriptPlayer;
+{    
+    [SerializeField] private AITeams _scriptPlayer;
     void Start()
     {
         

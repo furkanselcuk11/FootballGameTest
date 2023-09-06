@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using static AIPlayerTeam;
 
 public class AIController : MonoBehaviour
 {
@@ -20,13 +22,16 @@ public class AIController : MonoBehaviour
     [SerializeField] private LayerMask _groundLayer;
     [SerializeField] private Transform _groundCheckTransform;
     [Space]
-    [Header("Pass And Shoot Settings")]    
-    [Header("Short Pass Settings")]
+    [Header("Pass And Shoot Settings")]
+    [SerializeField] private bool _canPass = true;
+    private bool _isLongPass = false;
+    private bool _isShortPass = false;
     [SerializeField] private float _passDistance = 0.5f;
     [SerializeField] private float _passCheckInterval = 0.5f;
     [SerializeField] private float _minPassDistanceBetweenPlayerToTarget = 2f;
     [SerializeField] private float _targetToPlayerDistanceMin = 10f;
     [SerializeField] private float _targetToPlayerDistanceMax = 20f;
+    [Header("Short Pass Settings")]
     [SerializeField] private float _shortPassPowerMin = 8f;
     [SerializeField] private float _shortPassPowerMax = 12f;
     [SerializeField] private float _shortPassHeightMin = 0f;
@@ -36,57 +41,90 @@ public class AIController : MonoBehaviour
     [SerializeField] private float _longPassPowerMax = 25f;
     [SerializeField] private float _longPassHeightMin = 0f;
     [SerializeField] private float _longPassHeightMax = 8f;
-    [SerializeField] private bool _canPass = true;
-    private bool _isLongPass = false;
-    private bool _isShortPass = false;
     [Header("Shoot Settings")]
     [SerializeField] private Transform _goal;
+    [SerializeField] private float _shootCheckInterval = 0.5f;
     [SerializeField] private float _shootDistanceMin = 5f;
     [SerializeField] private float _shootDistanceMax = 30f;
     [SerializeField] private float _shootPowerMin = 10f;
     [SerializeField] private float _shootPowerMax = 30f;
     [SerializeField] private float _shootHeightMin = 0.25f;
-    [SerializeField] private float _shootHeightMax = 0.75f;   
-    [SerializeField] private float _shootCheckInterval = 0.5f;
+    [SerializeField] private float _shootHeightMax = 0.75f;
+
     [Space]
     [Header("Dribbling And Who's Ball")]
     [SerializeField] private float _dribbleDistance = 2f; // Topa doðru dribbling mesafesi
     private bool _isWaiting = false;
     [SerializeField] private float _waitingDuration = 1f;
 
+    [Space]
+    [Header("Teams")]
+    public bool isAttack = false;
+    [SerializeField] private AITeams _teams;
+    [SerializeField] private List<GameObject> _teamA = new List<GameObject>();
+    [SerializeField] private List<GameObject> _teamB = new List<GameObject>();
+    [SerializeField] private Transform _teamAGoal;
+    [SerializeField] private Transform _teamBGoal;
+    private AIPlayerTeam.Team _playerTeam;  // oyunucunun takýmý
+                                            // 
+    Vector3 _directionToDefenseGoal; // Team Defense Goal
+    Vector3 _directionToAttackGoal;  // Team Attack Goal
+    Vector3 _directionToBall; // Top pozisyonu
+
     private Rigidbody _rb;
     private AIAnimatoinController _animController;
 
     private AIBall _ballAttachedToPlayer;   // Top oyuncuya baglý
+    [SerializeField] private AIPlayerState _currentState;
     public AIBall BallAttachedToPlayer { get => _ballAttachedToPlayer; set => _ballAttachedToPlayer = value; }
+    public AIPlayerState CurrentState { get => _currentState; set => _currentState = value; }
+
     private void Awake()
     {
         this._animController = this.GetComponent<AIAnimatoinController>();
+        _currentState = AIPlayerState.Idle; // Baþlangýç durumunu ayarlayabilirsiniz.
     }
     void Start()
     {
         _rb = GetComponent<Rigidbody>();
         _rb.useGravity = false;
+        AIPlayerTeam aiPlayerTeam = GetComponent<AIPlayerTeam>();
+        if (aiPlayerTeam != null)
+        {
+            _playerTeam = aiPlayerTeam.playerTeam;
+        }
+        else
+        {
+            return;
+        }
+
         _moveSpeed = Random.Range(_moveSpeedMin, _moveSpeedMax);    // Random  hýz belirleme
-        StartCoroutine(nameof(BallFind));   // Top arama
-        StartCoroutine(nameof(SelectTargetPlayerAI)); // En yakýn oyuncu arama        
+
+        StartWork();               
+    }
+    void StartWork()
+    {
+        StartCoroutine(nameof(BallFind));   // Top arama     
+        FindingTeamPlayers(); // Takým arkadaþlarýný bul
+        StartCoroutine(nameof(ContinuousTargetSearch)); // En yakýn oyuncu arama        
         StartCoroutine(CheckAndShootCoroutine());   // Sut kontol ve cekme
-        StartCoroutine(CheckAndPassCoroutine());   // Pass kontol ve pas verme
+        StartCoroutine(CheckAndPassCoroutine());   // Pass kontol ve pas verme 
     }
     void Update()
-    {        
-        PlayerYAxisLimit();
-        LookTheBall();        
+    {
+        PlayerYAxisLimit();        
     }
     private void FixedUpdate()
     {
+        if (_ball != null)
+            LookTheBall();
         // Eðer karakter yerde deðilse, yer çekimi uygula
         if (!IsGrounded())
         {
             Vector3 gravity = _gravityScale * Physics.gravity; // Yer çekimi kuvveti
             _rb.AddForce(gravity, ForceMode.Acceleration);
         }
-        if (!_isWaiting)
+        if (!_isWaiting && _ball != null)
         {
             Move();
         }
@@ -97,75 +135,171 @@ public class AIController : MonoBehaviour
         }
     }
     void Move()
-    {        
-        // Eðer top rakipteyse, topa ve oyuncuya doðru hareket et
-        if (IsBallWithOpponent())
+    {
+        //// Eðer top rakipteyse, topa ve oyuncuya doðru hareket et
+        //if (PlayerStatusCheck())
+        //{
+        //    Vector3 directionToBallWithDribble = _ball.position - transform.position;
+        //    _rb.velocity = directionToBallWithDribble.normalized * _moveSpeed;
+        //    this._animController.MoveAnimPlay();    // Move Anim
+        //}
+        //else
+        //{
+        //    // Eðer top bizdeyse, kaleye doðru hareket et
+        //    Vector3 directionToBall = _goal.position - transform.position;
+        //    float distanceToBall = directionToBall.magnitude;
+
+        //    // _dribbleDistance (deðerini oyucunun kaleci=100, defan=50s, orta saha=10 ve forvet=2 olamsýna göre ayarla
+        //    // _dribbleDistance kaleye yaklaþabileceði min uzaklýk) 
+
+        //    // Top bizde ise, topa doðru dribbling mesafesine gelene kadar hareket et
+        //    if (distanceToBall > _dribbleDistance)
+        //    {
+        //        _rb.velocity = directionToBall.normalized * _moveSpeed;
+        //        this._animController.MoveAnimPlay();    // Move Anim
+        //    }
+        //    else
+        //    {
+        //        _rb.velocity = Vector3.zero; // Dribbling mesafesine gelindiðinde dur
+        //        this._animController.IdleAnimPlay();    // Idle Anim
+        //    }
+        //}
+
+        //------
+
+        if (this._playerTeam == AIPlayerTeam.Team.ATeam)
         {
-            Vector3 directionToBallWithDribble = _ball.position - transform.position;
-            _rb.velocity = directionToBallWithDribble.normalized * _moveSpeed;
+            _directionToDefenseGoal = _teamAGoal.position - transform.position; // A Team Defense Goal
+            _directionToAttackGoal = _teamBGoal.position - transform.position; // A Team Attack Goal
+        }
+        else if (this._playerTeam == AIPlayerTeam.Team.BTeam)
+        {
+            _directionToDefenseGoal = _teamBGoal.position - transform.position;    // B Team Defense Goal
+            _directionToAttackGoal = _teamAGoal.position - transform.position;     // B Team Attack Goal
+        }
+
+        _directionToBall = _ball.position - transform.position;   // Top pozisyonu
+
+        float distanceToBall = _directionToAttackGoal.magnitude;
+
+        switch (_currentState)
+        {
+            case AIPlayerState.Idle:
+                Idle();
+                break;
+            case AIPlayerState.FreeMove:
+                FreeMove();
+                break;
+            case AIPlayerState.CatchTheBall:
+                CatchTheBall(_directionToBall);
+                break;
+            case AIPlayerState.Defense:
+                Defense(_directionToDefenseGoal);
+                break;
+            case AIPlayerState.Attack:
+                Attack(distanceToBall, _directionToAttackGoal);
+                break;
+            default:
+                Debug.LogError("Geçersiz durum!");
+                break;
+        }
+    }
+    void Idle()
+    {
+        //* Bekle
+        _rb.velocity = Vector3.zero;
+        this._animController.IdleAnimPlay();    // Idle Anim
+    }
+    void FreeMove()
+    {
+        //* Random hareket et
+        this._animController.MoveAnimPlay();    // Move Anim
+    }
+    void CatchTheBall(Vector3 directionToBallWithDribble)
+    {
+        //* Top boþta ise topa doðru hareket et
+        //** Topa en yakýn oyuncu hareket eder   
+        _rb.velocity = directionToBallWithDribble.normalized * _moveSpeed;
+        this._animController.MoveAnimPlay();    // Move Anim
+    }
+    void Defense(Vector3 directionToBallWithDribble)
+    {
+        //* Top rakipte ise savunmaya dön
+        //** Topa en yakýn oyuncu rakip oyuncuya gider
+        _rb.velocity = directionToBallWithDribble.normalized * _moveSpeed;
+        this._animController.MoveAnimPlay();    // Move Anim
+    }
+    void Attack(float distanceToBall, Vector3 directionToBall)
+    {
+        //* Top kendi takýmýnda ise rakip kaleye dribling mesafesi kadar ilerle 
+        //** Top Bu AI'da ise rakip kaleye doðru açýlý ilerle
+
+        //+ Top bizde ise, topa doðru dribbling mesafesine gelene kadar hareket et
+        if (distanceToBall > _dribbleDistance)
+        {
+            _rb.velocity = directionToBall.normalized * _moveSpeed;
             this._animController.MoveAnimPlay();    // Move Anim
         }
         else
         {
-            // Eðer top bizdeyse, kaleye doðru hareket et
-            Vector3 directionToBall = _goal.position - transform.position;
-            float distanceToBall = directionToBall.magnitude;
-
-            // _dribbleDistance (deðerini oyucunun kaleci=100, defan=50s, orta saha=10 ve forvet=2 olamsýna göre ayarla
-            // _dribbleDistance kaleye yaklaþabileceði min uzaklýk) 
-
-            // Top bizde ise, topa doðru dribbling mesafesine gelene kadar hareket et
-            if (distanceToBall > _dribbleDistance)
-            {
-                _rb.velocity = directionToBall.normalized * _moveSpeed;
-                this._animController.MoveAnimPlay();    // Move Anim
-            }
-            else
-            {
-                _rb.velocity = Vector3.zero; // Dribbling mesafesine gelindiðinde dur
-                this._animController.IdleAnimPlay();    // Idle Anim
-            }
+            _currentState = AIPlayerState.Idle;
         }
     }
     void LookTheBall()
     {
-        if (_ball != null && _ballAttachedToPlayer == null)
-        {
-            // Hedef top belirlenmiþse ve oyuncu topa baðlý deðilse Topa doðru bak
-            Vector3 lookAtPosition = _ball.position;
-            lookAtPosition.y = transform.position.y;
-            transform.LookAt(lookAtPosition);
-        }
-        //else if (_ball != null && _ballAttachedToPlayer != null)
+        //if (_ball != null && _ballAttachedToPlayer == null)
         //{
-        //    // Hedef top belirlenmiþse ve oyuncu topa baðlý ise kaleye doðru bak
-        //    Vector3 lookAtPosition = _goal.position;
+        //    // Hedef top belirlenmiþse ve oyuncu topa baðlý deðilse Topa doðru bak
+        //    Vector3 lookAtPosition = _ball.position;
         //    lookAtPosition.y = transform.position.y;
         //    transform.LookAt(lookAtPosition);
         //}
-        ////else if (_ball != null && _ballAttachedToPlayer != null && _isShortPass || _isLongPass)
-        ////{
-        ////    // Oyunucuya bak
-        ////    Vector3 lookAtPosition = _targetPlayer.position;
-        ////    lookAtPosition.y = transform.position.y;
-        ////    transform.LookAt(lookAtPosition);
-        ////}
-        else if (_ball != null && _ballAttachedToPlayer != null)
+        //else if (_ball != null && _ballAttachedToPlayer != null)
+        //{
+        //    if (!_isShortPass && !_isLongPass)
+        //    {
+        //        // Hedef top belirlenmiþse ve oyuncu topa baðlý ise kaleye doðru bak
+        //        Vector3 lookAtPosition = _goal.position;
+        //        lookAtPosition.y = transform.position.y;
+        //        transform.LookAt(lookAtPosition);
+        //    }
+        //    else if (_canPass && _isShortPass || _isLongPass)
+        //    {
+        //        // Oyunucuya bak
+        //        Vector3 lookAtPosition = _targetPlayer.position;
+        //        lookAtPosition.y = transform.position.y;
+        //        transform.LookAt(lookAtPosition);
+        //    }
+        //}
+
+        //--
+        Vector3 lookAtBallPosition = _ball.position;
+        lookAtBallPosition.y = transform.position.y;
+        Vector3 lookAtDefencePosition = _directionToDefenseGoal;
+        lookAtDefencePosition.y = transform.position.y;
+        Vector3 lookAtAttackPosition = _directionToAttackGoal;
+        lookAtAttackPosition.y = transform.position.y;
+
+        switch (_currentState)
         {
-            if (!_isShortPass && !_isLongPass)
-            {
-                // Hedef top belirlenmiþse ve oyuncu topa baðlý ise kaleye doðru bak
-                Vector3 lookAtPosition = _goal.position;
-                lookAtPosition.y = transform.position.y;
-                transform.LookAt(lookAtPosition);
-            }
-            else if(_canPass &&_isShortPass || _isLongPass)
-            {
-                // Oyunucuya bak
-                Vector3 lookAtPosition = _targetPlayer.position;
-                lookAtPosition.y = transform.position.y;
-                transform.LookAt(lookAtPosition);
-            }
+            case AIPlayerState.Idle:
+                transform.LookAt(lookAtBallPosition);
+                break;
+            case AIPlayerState.FreeMove:
+                transform.LookAt(lookAtAttackPosition);
+                break;
+            case AIPlayerState.CatchTheBall:
+                transform.LookAt(lookAtBallPosition);
+                break;
+            case AIPlayerState.Defense:
+                transform.LookAt(lookAtDefencePosition);
+                break;
+            case AIPlayerState.Attack:
+                transform.LookAt(lookAtAttackPosition);
+                break;
+            default:
+                Debug.LogError("Geçersiz durum!");
+                break;
         }
     }
     private IEnumerator CheckAndPassCoroutine()
@@ -207,7 +341,7 @@ public class AIController : MonoBehaviour
         return distanceToBall <= _passDistance;
     }
     void Pass()
-    {    
+    {
         _ballAttachedToPlayer.StickToPlayer = false;
         Rigidbody ballRigidbody = _ball.GetComponent<Rigidbody>();
 
@@ -236,7 +370,7 @@ public class AIController : MonoBehaviour
         _isShortPass = false;
         _canPass = false;
         _ballAttachedToPlayer = null;
-        _ball.GetComponent<AIBall>().BallToPlayerAINull();        
+        _ball.GetComponent<AIBall>().BallToPlayerAINull();
         PlayerWaiting();
         StartCoroutine(nameof(SelectTargetPlayerAI));   // Test edilecek
     }
@@ -254,7 +388,7 @@ public class AIController : MonoBehaviour
     }
     bool CanShoot()
     {
-        Vector3 directionToGoal = _goal.position - _ball.position;
+        Vector3 directionToGoal = _directionToAttackGoal - _ball.position;
         float distanceToBall = directionToGoal.magnitude;
 
         float shootDistance = Random.Range(_shootDistanceMin, _shootDistanceMax);
@@ -263,11 +397,11 @@ public class AIController : MonoBehaviour
     void Shoot()
     {
         // Shoot mekaniði
-        Vector3 directionToGoal = _goal.position - _ball.position;
+        Vector3 directionToGoal = _directionToAttackGoal - _ball.position;
         float distanceToBall = directionToGoal.magnitude;
         directionToGoal.y = Random.Range(_shootHeightMin, _shootHeightMax);
         float shootPower = Random.Range(_shootPowerMin, _shootPowerMax);
-        
+
         this._animController.ShootAnimPlay();   // Shoot Anim
         Debug.Log("SHOOT - UZAKLIK: " + distanceToBall);
         _ball.GetComponent<Rigidbody>().velocity = directionToGoal.normalized * shootPower; // Shoot
@@ -276,68 +410,101 @@ public class AIController : MonoBehaviour
         _ballAttachedToPlayer = null;
         _ball.GetComponent<AIBall>().BallToPlayerAINull();
         PlayerWaiting();
-    }    
-    bool IsBallWithOpponent()
+    }
+    bool PlayerStatusCheck()
     {
         // Burada topun nerede olduðunu ve kimin kontrolünde olduðunu belirleyen bir mekanizma olmalýdýr.(A takýmý B takýmý)
-        // _ball içindeki TransformPlayerAI dan hangi takým olduðunu isimden bul
 
-        bool isBallWithOpponent = false;
-        if(_ball != null)   // Top hedeflenmiþsse
+        // * isBallWithOpponent eðer true ise=> Topa git * isBallWithOpponent eðer false ise=> Kaleye git
+
+        this.isAttack = false;    // Top kendisinde veya takýmýnda ise false / Rakipte ise true
+        if (_ball != null)   // Top hedeflenmiþsse
         {
-            if (_ballAttachedToPlayer != null)
+            if (this._ballAttachedToPlayer != null)
             {
-                // Oyuncu topa baðlý ise top bizde
-                isBallWithOpponent = false;
+                // Top bu AI'da ise
+                this.isAttack = false;
+                //Debug.Log(this.gameObject.name+ "_ballAttachedToPlayer != null");
+
+                // Top bu AI'da ise diðer takýmlara göre yazýlacak kod 
+
+                if (this._playerTeam == AIPlayerTeam.Team.ATeam)
+                {
+                    foreach (GameObject playerTeamA in _teamA)
+                    {
+                        playerTeamA.GetComponent<AIController>().isAttack = false;
+                    }
+                    foreach (GameObject playerTeamB in _teamB)
+                    {
+                        playerTeamB.GetComponent<AIController>().isAttack = true;
+                    }
+                }
+                else if (this._playerTeam == AIPlayerTeam.Team.BTeam)
+                {
+                    foreach (GameObject playerTeamB in _teamB)
+                    {
+                        playerTeamB.GetComponent<AIController>().isAttack = false;
+                    }
+                    foreach (GameObject playerTeamA in _teamA)
+                    {
+                        playerTeamA.GetComponent<AIController>().isAttack = true;
+                    }
+                }
             }
-            else if (_ballAttachedToPlayer == null)
+            else
             {
-                // Oyuncu topa baðlý deðilse top rakipte
-                isBallWithOpponent = true;
+                // Top bu AI'da deðilse
+                //Debug.Log(this.gameObject.name + "_ballAttachedToPlayer == null");
+                //isBallWithOpponent = true;
+
+                // Top bu AI'da deðilse diðer takýmlara göre yazýlacak kod 
+
+                if (this._playerTeam == AIPlayerTeam.Team.ATeam)
+                {
+                    foreach (GameObject playerTeamA in _teamA)
+                    {
+                        if (playerTeamA.GetComponent<AIController>().isAttack)
+                        {
+                            this.isAttack = true;
+                        }
+                        else
+                        {
+                            this.isAttack = false;
+                        }
+                    }
+                }
+                else if (this._playerTeam == AIPlayerTeam.Team.BTeam)
+                {
+                    foreach (GameObject playerTeamB in _teamB)
+                    {
+                        if (playerTeamB.GetComponent<AIController>().BallAttachedToPlayer == null)
+                        {
+                            this.isAttack = true;
+                        }
+                        else
+                        {
+                            this.isAttack = false;
+                        }
+                        //if (playerTeamB.GetComponent<AIController>().isBallWithOpponent)
+                        //{
+                        //    this.isBallWithOpponent = true;
+                        //}
+                        //else
+                        //{
+                        //    this.isBallWithOpponent = false;
+                        //}
+                    }
+                }
             }
-
-            //if (this.CompareTag("TeamA"))
-            //{                
-            //    if (_ballAttachedToPlayer != null && _ball.GetComponent<AIBall>().TransformPlayerAI.CompareTag("TeamA"))
-            //    {
-            //        // Oyuncu topa baðlý ve top bizim herhangi bir oyuncuda ise top bizde
-            //        isBallWithOpponent = false;
-            //    }
-            //    else if (_ballAttachedToPlayer == null && _ball.GetComponent<AIBall>().TransformPlayerAI.CompareTag("TeamB"))
-            //    {
-            //        // Oyuncu topa baðlý deðilse ve top bizim herhangi bir oyuncuda ise top bizde
-            //        isBallWithOpponent = false;
-            //    }
-            //    else if (_ballAttachedToPlayer == null && _ball.GetComponent<AIBall>().TransformPlayerAI.CompareTag("TeamB"))
-            //    {
-            //        // Oyuncu topa baðlý deðilse ve top bizim rakip bir oyuncuda ise top rakipte
-            //        isBallWithOpponent = true;
-            //    }
-            //}
-            //else
-            //{
-            //    if (_ballAttachedToPlayer != null && _ball.GetComponent<AIBall>().TransformPlayerAI.CompareTag("TeamB"))
-            //    {
-            //        // Oyuncu topa baðlý ise top bizde
-            //        isBallWithOpponent = false;
-            //    }
-            //    else if (_ballAttachedToPlayer == null && _ball.GetComponent<AIBall>().TransformPlayerAI.CompareTag("TeamA"))
-            //    {
-            //        // Oyuncu topa baðlý deðilse top rakipte
-            //        isBallWithOpponent = true;
-            //    }
-            //}
-
-        }        
-
-        return isBallWithOpponent;
+        }
+        return isAttack;
     }
     private bool IsGrounded()
     {
         // Karakterin yerde olup olmadýðýný kontrol et
         RaycastHit hit;
         float raycastDistance = 0.1f; // Yer kontrolü için raycast mesafesi
-        return Physics.Raycast(_groundCheckTransform.position, Vector3.down, out hit, raycastDistance,_groundLayer);
+        return Physics.Raycast(_groundCheckTransform.position, Vector3.down, out hit, raycastDistance, _groundLayer);
     }
     private void PlayerYAxisLimit()
     {
@@ -365,6 +532,12 @@ public class AIController : MonoBehaviour
         this._animController.IdleAnimPlay();    // Idle Anim
         StartCoroutine(nameof(PlayerÝsWaiting));
     }
+    IEnumerator PlayerÝsWaiting()
+    {
+        // Hareket etmek için bekle
+        yield return new WaitForSeconds(_waitingDuration);
+        _isWaiting = false;
+    }
     IEnumerator BallFind()
     {
         // Topu bul
@@ -372,51 +545,78 @@ public class AIController : MonoBehaviour
         _ball = GameObject.FindWithTag("AIBall").gameObject.transform;
         _isWaiting = false;
     }
-    IEnumerator PlayerÝsWaiting()
+    IEnumerator ContinuousTargetSearch()
     {
-        // Hareket etmek için bekle
-        yield return new WaitForSeconds(_waitingDuration);
-        _isWaiting = false;
+        while (true) // Sonsuz bir döngü oluþturur, yani oyun bitene kadar çalýþýr.
+        {
+            SelectTargetPlayerAI();
+
+            // 1 saniye bekleme süresi ekleyebilirsiniz (opsiyonel)
+            yield return new WaitForSeconds(1f);
+        }
     }
-    IEnumerator SelectTargetPlayerAI()
+    void SelectTargetPlayerAI()
     {
         // Pas verilecek en yakýn oyuncuyu bul
         _targetPlayer = null;
-        yield return new WaitForSeconds(1f);
 
-        if (this.CompareTag("TeamA"))
+        if (this._playerTeam == AIPlayerTeam.Team.ATeam)
         {
             // Sahadaki tüm oyuncularý bul
-            GameObject[] players = GameObject.FindGameObjectsWithTag("TeamA");
-
-            // Eðer kendisi oyuncular listesinde varsa, kendisini listeden çýkar (kendi takým arkadaþýna pas yapmak istemeyiz)
-            players = players.Where(player => player != gameObject).ToArray();
+            List <GameObject> players = _teamA;
+            // Eðer kendisi oyuncular listesinde varsa, kendisini listeden çýkar (kendisine pas yapmak istemeyiz)
+            players = _teamA.Where(player => player != gameObject).ToList();
 
             // Kendisine olan uzaklýðýna göre oyuncularý sýrala
-            players = players.OrderBy(player => Vector3.Distance(transform.position, player.transform.position)).ToArray();
+            players = players.OrderBy(player => Vector3.Distance(transform.position, player.transform.position)).ToList();
 
             // Ýlk oyuncuyu hedef olarak seç (yani en yakýn oyuncu)
-            if (players.Length > 0)
+            if (players.Count > 0)
             {
                 _targetPlayer = players[0].transform;
             }
         }
-        else
+        else if (this._playerTeam == AIPlayerTeam.Team.BTeam)
         {
             // Sahadaki tüm oyuncularý bul
-            GameObject[] players = GameObject.FindGameObjectsWithTag("TeamB");
-
-            // Eðer kendisi oyuncular listesinde varsa, kendisini listeden çýkar (kendi takým arkadaþýna pas yapmak istemeyiz)
-            players = players.Where(player => player != gameObject).ToArray();
+            List<GameObject> players = _teamB;
+            // Eðer kendisi oyuncular listesinde varsa, kendisini listeden çýkar (kendisine pas yapmak istemeyiz)
+            players = players.Where(player => player != gameObject).ToList();
 
             // Kendisine olan uzaklýðýna göre oyuncularý sýrala
-            players = players.OrderBy(player => Vector3.Distance(transform.position, player.transform.position)).ToArray();
+            players = players.OrderBy(player => Vector3.Distance(transform.position, player.transform.position)).ToList();
 
             // Ýlk oyuncuyu hedef olarak seç (yani en yakýn oyuncu)
-            if (players.Length > 0)
+            if (players.Count > 0)
             {
                 _targetPlayer = players[0].transform;
             }
         }
+    }
+    void FindingTeamPlayers()
+    {
+        if(this._playerTeam == AIPlayerTeam.Team.ATeam)
+        {
+            // Sahadaki tüm oyuncularý bul
+            _teamA = _teams.teamA;
+            // Eðer kendisi oyuncular listesinde varsa, kendisini listeden çýkar (kendisine pas yapmak istemeyiz)
+            _teamA = _teamA.Where(player => player != gameObject).ToList();
+        }
+        else if(this._playerTeam == AIPlayerTeam.Team.BTeam)
+        {
+            // Sahadaki tüm oyuncularý bul
+            _teamB = _teams.teamB;
+            // Eðer kendisi oyuncular listesinde varsa, kendisini listeden çýkar (kendisine pas yapmak istemeyiz)
+            _teamB = _teamB.Where(player => player != gameObject).ToList();
+        }
+    }
+
+    public enum AIPlayerState
+    {
+        Idle,
+        FreeMove,
+        CatchTheBall,
+        Defense,
+        Attack,
     }
 }

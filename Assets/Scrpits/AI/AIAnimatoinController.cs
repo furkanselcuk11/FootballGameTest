@@ -9,6 +9,7 @@ public class AIAnimatoinController : MonoBehaviour
     public const int ANIMATION_LAYER_MOVE = 0;
     public const int ANIMATION_LAYER_SHOOT = 1;
     public const int ANIMATION_LAYER_PASS = 2;
+    [SerializeField] private float _animDelay = 0.25f;
     private void Awake()
     {
         this._animator = this.GetComponent<Animator>();
@@ -39,9 +40,9 @@ public class AIAnimatoinController : MonoBehaviour
     }
     IEnumerator PassAnimStopCorutine()
     {
-        yield return new WaitForSeconds(0.25f);
+        yield return new WaitForSeconds(_animDelay);
         this._animator.SetLayerWeight(ANIMATION_LAYER_PASS, Mathf.Lerp(_animator.GetLayerWeight(ANIMATION_LAYER_PASS), 0f, Time.deltaTime * 50f));
-        yield return new WaitForSeconds(0.25f);
+        yield return new WaitForSeconds(_animDelay);
         this._animator.Play("Idle", ANIMATION_LAYER_MOVE, 0);
         this._animator.SetLayerWeight(ANIMATION_LAYER_MOVE, 1f);
     }
@@ -53,9 +54,9 @@ public class AIAnimatoinController : MonoBehaviour
     }
     IEnumerator ShootAnimStopCorutine()
     {
-        yield return new WaitForSeconds(0.25f);
+        yield return new WaitForSeconds(_animDelay);
         this._animator.SetLayerWeight(ANIMATION_LAYER_SHOOT, Mathf.Lerp(_animator.GetLayerWeight(ANIMATION_LAYER_SHOOT), 0f, Time.deltaTime * 50f));
-        yield return new WaitForSeconds(0.25f);
+        yield return new WaitForSeconds(_animDelay);
         this._animator.Play("Idle", ANIMATION_LAYER_MOVE, 0);
         this._animator.SetLayerWeight(ANIMATION_LAYER_MOVE, 1f);
     }
