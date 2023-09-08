@@ -15,6 +15,7 @@ public class AIController : MonoBehaviour
     [SerializeField] private Transform _targetPlayer;
     [SerializeField] private float _gravityScale = 1f;
     [SerializeField] private float _maxYPositionPlayerAI = 1.5f;
+    [SerializeField] private AIPlayerState _currentState;
     private float _moveSpeed;
     [SerializeField] private float _moveSpeedMin = 2f;
     [SerializeField] private float _moveSpeedMax = 7f;
@@ -22,38 +23,45 @@ public class AIController : MonoBehaviour
     [SerializeField] private LayerMask _groundLayer;
     [SerializeField] private Transform _groundCheckTransform;
     [Space]
-    [Header("Pass And Shoot Settings")]
-    [SerializeField] private bool _canPass = true;
-    private bool _isLongPass = false;
-    private bool _isShortPass = false;
+    [Header("Pass And Shoot Settings")]    
     [SerializeField] private float _passDistance = 0.5f;
     [SerializeField] private float _passCheckInterval = 0.5f;
-    [SerializeField] private float _minPassDistanceBetweenPlayerToTarget = 2f;
-    [SerializeField] private float _targetToPlayerDistanceMin = 10f;
-    [SerializeField] private float _targetToPlayerDistanceMax = 20f;
+    [SerializeField] private float _minPassDistanceBetweenPlayerToTarget = 2f;  // Pas vermesi için min mesafe
+    [SerializeField] private float _passDistanceToTargetPlayerMin = 10f;    // Pas vermesi için hedef oyunuc ile arasýndaki min mesafesi
+    [SerializeField] private float _passDistanceToTargetPlayerMax = 20f;    // Pas vermesi için hedef oyunuc ile arasýndaki max mesafesi
     [Header("Short Pass Settings")]
-    [SerializeField] private float _shortPassPowerMin = 8f;
-    [SerializeField] private float _shortPassPowerMax = 12f;
-    [SerializeField] private float _shortPassHeightMin = 0f;
-    [SerializeField] private float _shortPassHeightMax = 5f;
+    [SerializeField] private float _passDistanceToShortMin = 5f;
+    [SerializeField] private float _passDistanceToShortMax = 10f;
+    [SerializeField] private float _shortPassPowerMin = 8f;     // Min Kýsa Pas gücü
+    [SerializeField] private float _shortPassPowerMax = 12f;    // Max Kýsa Pas gücü
+    [SerializeField] private float _shortPassHeightMin = 0f;    // Min Kýsa Pas yüksekliði
+    [SerializeField] private float _shortPassHeightMax = 5f;    // Max Kýsa Pas yyüksekliði
     [Header("Long Pass Settings")]
-    [SerializeField] private float _longPassPowerMin = 15f;
-    [SerializeField] private float _longPassPowerMax = 25f;
-    [SerializeField] private float _longPassHeightMin = 0f;
-    [SerializeField] private float _longPassHeightMax = 8f;
+    [SerializeField] private float _passDistanceToLongMin = 10f;
+    [SerializeField] private float _passDistanceToLongMax = 30f;
+    [SerializeField] private float _longPassPowerMin = 15f; // Min Uzun Pas gücü
+    [SerializeField] private float _longPassPowerMax = 25f; // Max Uzun Pas gücü
+    [SerializeField] private float _longPassHeightMin = 0f; // Min Uzun Pas yüksekliði
+    [SerializeField] private float _longPassHeightMax = 8f; // Max Uzun Pas yüksekliði
     [Header("Shoot Settings")]
     [SerializeField] private Transform _goal;
     [SerializeField] private float _shootCheckInterval = 0.5f;
-    [SerializeField] private float _shootDistanceMin = 5f;
-    [SerializeField] private float _shootDistanceMax = 30f;
-    [SerializeField] private float _shootPowerMin = 10f;
-    [SerializeField] private float _shootPowerMax = 30f;
-    [SerializeField] private float _shootHeightMin = 0.25f;
-    [SerializeField] private float _shootHeightMax = 0.75f;
+    [SerializeField] private float _shootDistanceMin = 5f;  // Min Þut mesafesi
+    [SerializeField] private float _shootDistanceMax = 30f; // Max Þut mesafesi
+    [SerializeField] private float _shootPowerMin = 10f;    // Min Þut gücü
+    [SerializeField] private float _shootPowerMax = 30f;    // Min Þut gücü
+    [SerializeField] private float _shootHeightMin = 0.25f; // Min Þut yüksekliði
+    [SerializeField] private float _shootHeightMax = 0.75f; // Max Þut  yüksekliði
+    private bool _canPass = true;
+    private bool _isLongPass = false;
+    private bool _isShortPass = false;
 
     [Space]
     [Header("Dribbling And Who's Ball")]
-    [SerializeField] private float _dribbleDistance = 2f; // Topa doðru dribbling mesafesi
+    [SerializeField] private float _dribbleToAttackGoalDistance = 2f; // Rakip Kaleye yaklaþabileceði min uzaklýk) 
+    // Forvet:5-8   OrtaSaha:20-25   Defans:45-50   Kaleci:80
+    [SerializeField] private float _dribbleToDefenceGoalDistance = 2f; // Kendi Kalesi yaklaþabileceði min uzaklýk) 
+    // Forvet:40-45  OrtaSaha:20-25   Defans:5-10   Kaleci:0-5
     private bool _isWaiting = false;
     [SerializeField] private float _waitingDuration = 1f;
 
@@ -66,7 +74,7 @@ public class AIController : MonoBehaviour
     [SerializeField] private Transform _teamAGoal;
     [SerializeField] private Transform _teamBGoal;
     private AIPlayerTeam.Team _playerTeam;  // oyunucunun takýmý
-                                            // 
+    
     Vector3 _directionToDefenseGoal; // Team Defense Goal
     Vector3 _directionToAttackGoal;  // Team Attack Goal
     Vector3 _directionToBall; // Top pozisyonu
@@ -74,8 +82,7 @@ public class AIController : MonoBehaviour
     private Rigidbody _rb;
     private AIAnimatoinController _animController;
 
-    private AIBall _ballAttachedToPlayer;   // Top oyuncuya baglý
-    [SerializeField] private AIPlayerState _currentState;
+    private AIBall _ballAttachedToPlayer;   // Top oyuncuya baglý    
     public AIBall BallAttachedToPlayer { get => _ballAttachedToPlayer; set => _ballAttachedToPlayer = value; }
     public AIPlayerState CurrentState { get => _currentState; set => _currentState = value; }
 
@@ -116,8 +123,6 @@ public class AIController : MonoBehaviour
     }
     private void FixedUpdate()
     {
-        if (_ball != null)
-            LookTheBall();
         // Eðer karakter yerde deðilse, yer çekimi uygula
         if (!IsGrounded())
         {
@@ -180,7 +185,8 @@ public class AIController : MonoBehaviour
 
         _directionToBall = _ball.position - transform.position;   // Top pozisyonu
 
-        float distanceToBall = _directionToAttackGoal.magnitude;
+        float distanceToAttackGoal = _directionToAttackGoal.magnitude;
+        float distanceToDefenceGoal = _directionToDefenseGoal.magnitude;
 
         switch (_currentState)
         {
@@ -190,14 +196,17 @@ public class AIController : MonoBehaviour
             case AIPlayerState.FreeMove:
                 FreeMove();
                 break;
+            case AIPlayerState.PositionMove:
+                PositionMove();
+                break;
             case AIPlayerState.CatchTheBall:
                 CatchTheBall(_directionToBall);
                 break;
             case AIPlayerState.Defense:
-                Defense(_directionToDefenseGoal);
+                Defense(distanceToDefenceGoal, _directionToDefenseGoal);
                 break;
             case AIPlayerState.Attack:
-                Attack(distanceToBall, _directionToAttackGoal);
+                Attack(distanceToAttackGoal, _directionToAttackGoal);
                 break;
             default:
                 Debug.LogError("Geçersiz durum!");
@@ -215,29 +224,69 @@ public class AIController : MonoBehaviour
         //* Random hareket et
         this._animController.MoveAnimPlay();    // Move Anim
     }
-    void CatchTheBall(Vector3 directionToBallWithDribble)
+    void PositionMove()
+    {
+        //* AI Player kendi mevkisine döner
+        this._animController.MoveAnimPlay();    // Move Anim
+    }
+    void CatchTheBall(Vector3 directionToBall)
     {
         //* Top boþta ise topa doðru hareket et
         //** Topa en yakýn oyuncu hareket eder   
-        _rb.velocity = directionToBallWithDribble.normalized * _moveSpeed;
-        this._animController.MoveAnimPlay();    // Move Anim
-    }
-    void Defense(Vector3 directionToBallWithDribble)
-    {
-        //* Top rakipte ise savunmaya dön
-        //** Topa en yakýn oyuncu rakip oyuncuya gider
-        _rb.velocity = directionToBallWithDribble.normalized * _moveSpeed;
-        this._animController.MoveAnimPlay();    // Move Anim
-    }
-    void Attack(float distanceToBall, Vector3 directionToBall)
-    {
-        //* Top kendi takýmýnda ise rakip kaleye dribling mesafesi kadar ilerle 
-        //** Top Bu AI'da ise rakip kaleye doðru açýlý ilerle
-
-        //+ Top bizde ise, topa doðru dribbling mesafesine gelene kadar hareket et
-        if (distanceToBall > _dribbleDistance)
+        if (_ballAttachedToPlayer == null)
         {
+            // Top kendisinde deðilse topa git
             _rb.velocity = directionToBall.normalized * _moveSpeed;
+            this._animController.MoveAnimPlay();    // Move Anim
+
+            if (this._playerTeam == AIPlayerTeam.Team.ATeam)
+            {
+                foreach (GameObject player in _teamA)
+                {
+                    player.GetComponent<AIController>().CurrentState = AIController.AIPlayerState.Idle;
+                }
+            }
+            else if (this._playerTeam == AIPlayerTeam.Team.BTeam)
+            {
+                foreach (GameObject player in _teamB)
+                {
+                    player.GetComponent<AIController>().CurrentState = AIController.AIPlayerState.Idle;
+                }
+            }
+        }
+        else
+        {
+            // Topu aldýðýnda ataða çýk
+            _currentState = AIPlayerState.Attack;
+
+            if (this._playerTeam == AIPlayerTeam.Team.ATeam)
+            {
+                foreach (GameObject player in _teamA)
+                {
+                    player.GetComponent<AIController>().CurrentState = AIController.AIPlayerState.Attack;
+                }
+            }
+            else if (this._playerTeam == AIPlayerTeam.Team.BTeam)
+            {
+                foreach (GameObject player in _teamB)
+                {
+                    player.GetComponent<AIController>().CurrentState = AIController.AIPlayerState.Attack;
+                }
+            }
+            _teams.isTheBallFree = false;
+            _teams.isTheBallInTeamA = 1;
+        }
+        
+    }
+    void Defense(float distanceToDefenceGoal, Vector3 directionToDefence)
+    {
+        //* Top rakipte ise savunmaya dön _dribbleToDefenceGoalDistance(dribling) mesafesi kadar dön
+        //** Topa en yakýn oyuncu rakip oyuncuya gider
+
+        //+  Top bizde ise, top ile _dribbleToDefenceGoalDistance(dribling) mesafesi kadar hareket et
+        if (distanceToDefenceGoal > _dribbleToDefenceGoalDistance)
+        {
+            _rb.velocity = directionToDefence.normalized * _moveSpeed;
             this._animController.MoveAnimPlay();    // Move Anim
         }
         else
@@ -245,61 +294,20 @@ public class AIController : MonoBehaviour
             _currentState = AIPlayerState.Idle;
         }
     }
-    void LookTheBall()
+    void Attack(float distanceToAttackGoal, Vector3 directionToAttack)
     {
-        //if (_ball != null && _ballAttachedToPlayer == null)
-        //{
-        //    // Hedef top belirlenmiþse ve oyuncu topa baðlý deðilse Topa doðru bak
-        //    Vector3 lookAtPosition = _ball.position;
-        //    lookAtPosition.y = transform.position.y;
-        //    transform.LookAt(lookAtPosition);
-        //}
-        //else if (_ball != null && _ballAttachedToPlayer != null)
-        //{
-        //    if (!_isShortPass && !_isLongPass)
-        //    {
-        //        // Hedef top belirlenmiþse ve oyuncu topa baðlý ise kaleye doðru bak
-        //        Vector3 lookAtPosition = _goal.position;
-        //        lookAtPosition.y = transform.position.y;
-        //        transform.LookAt(lookAtPosition);
-        //    }
-        //    else if (_canPass && _isShortPass || _isLongPass)
-        //    {
-        //        // Oyunucuya bak
-        //        Vector3 lookAtPosition = _targetPlayer.position;
-        //        lookAtPosition.y = transform.position.y;
-        //        transform.LookAt(lookAtPosition);
-        //    }
-        //}
+        //* Top kendi takýmýnda ise rakip kaleye _dribbleToAttackGoalDistance(dribling) mesafesi kadar ilerle 
+        //** Top Bu AI'da ise rakip kaleye doðru açýlý ilerle
 
-        //--
-        Vector3 lookAtBallPosition = _ball.position;
-        lookAtBallPosition.y = transform.position.y;
-        Vector3 lookAtDefencePosition = _directionToDefenseGoal;
-        lookAtDefencePosition.y = transform.position.y;
-        Vector3 lookAtAttackPosition = _directionToAttackGoal;
-        lookAtAttackPosition.y = transform.position.y;
-
-        switch (_currentState)
+        //+ Top bizde ise, top ile _dribbleToAttackGoalDistance(dribling) mesafesi kadar hareket et
+        if (distanceToAttackGoal > _dribbleToAttackGoalDistance)
         {
-            case AIPlayerState.Idle:
-                transform.LookAt(lookAtBallPosition);
-                break;
-            case AIPlayerState.FreeMove:
-                transform.LookAt(lookAtAttackPosition);
-                break;
-            case AIPlayerState.CatchTheBall:
-                transform.LookAt(lookAtBallPosition);
-                break;
-            case AIPlayerState.Defense:
-                transform.LookAt(lookAtDefencePosition);
-                break;
-            case AIPlayerState.Attack:
-                transform.LookAt(lookAtAttackPosition);
-                break;
-            default:
-                Debug.LogError("Geçersiz durum!");
-                break;
+            _rb.velocity = directionToAttack.normalized * _moveSpeed;
+            this._animController.MoveAnimPlay();    // Move Anim
+        }
+        else
+        {
+            _currentState = AIPlayerState.Idle;
         }
     }
     private IEnumerator CheckAndPassCoroutine()
@@ -316,27 +324,44 @@ public class AIController : MonoBehaviour
     }
     bool CanPass()
     {
-        Vector3 directionToBall = _ball.position - transform.position;
-        float distanceToBall = directionToBall.magnitude;
+        Vector3 directionToBall = _ball.position - transform.position;  // Oyuncu ile top arasýndaki yön
+        float distanceToBall = directionToBall.magnitude; // Oyuncu ile top arasýndaki mesafe
 
-        Vector3 directionToTargetPlayer = _targetPlayer.position - transform.position;
-        float distanceToTargetPlayer = directionToTargetPlayer.magnitude;
+        Vector3 directionToTargetPlayer = _targetPlayer.position - transform.position;  // Oyucunun pas vereceði oyuncu ile arasýndaki yön
+        float passDistanceToTargetPlayer = directionToTargetPlayer.magnitude;   // Oyucunun pas vereceði oyuncu ile arasýndaki mesafe
 
-        if (distanceToTargetPlayer > _targetToPlayerDistanceMin && distanceToTargetPlayer < _targetToPlayerDistanceMax)
+        // Oyuncunun pas vereceði arkadaþý ile arasýndaki mesafe  Pas vermesi için min mesafeden büyükse pas verebilir
+        if (passDistanceToTargetPlayer > _passDistanceToShortMin || passDistanceToTargetPlayer <= _passDistanceToShortMax)
+        {
+            // Kýsa pas
+            _isShortPass = true;            
+        }
+        else if (passDistanceToTargetPlayer > _passDistanceToLongMin && passDistanceToTargetPlayer <= _passDistanceToLongMax)
         {
             // Uzun pas
             _isLongPass = true;
         }
-        else if (distanceToTargetPlayer > _minPassDistanceBetweenPlayerToTarget && distanceToTargetPlayer < _targetToPlayerDistanceMin)
-        {
-            // Kisa pas
-            _isShortPass = true;
-        }
-        else
+        else if (passDistanceToTargetPlayer <= _passDistanceToShortMin || passDistanceToTargetPlayer > _passDistanceToLongMax )
         {
             _isLongPass = false;
             _isShortPass = false;
         }
+
+        //if (passDistanceToTargetPlayer > _passDistanceToTargetPlayerMin && passDistanceToTargetPlayer < _passDistanceToTargetPlayerMax)
+        //{
+        //    // Uzun pas
+        //    _isLongPass = true;
+        //}
+        //else if (passDistanceToTargetPlayer > _minPassDistanceBetweenPlayerToTarget && passDistanceToTargetPlayer < _passDistanceToTargetPlayerMin)
+        //{
+        //    // Kisa pas
+        //    _isShortPass = true;
+        //}
+        //else
+        //{
+        //    _isLongPass = false;
+        //    _isShortPass = false;
+        //}
 
         return distanceToBall <= _passDistance;
     }
@@ -408,7 +433,7 @@ public class AIController : MonoBehaviour
 
         _ballAttachedToPlayer.StickToPlayer = false;
         _ballAttachedToPlayer = null;
-        _ball.GetComponent<AIBall>().BallToPlayerAINull();
+        _ball.GetComponent<AIBall>().BallToPlayerAINull();        
         PlayerWaiting();
     }
     bool PlayerStatusCheck()
@@ -515,12 +540,14 @@ public class AIController : MonoBehaviour
     }
     void PlayerWaiting()
     {
-        // Pas veya þut sonrasý oyuncu beklemesi
+        // Pas veya þut attýktan sonra oyuncu beklemesi
         _isWaiting = true;
         _ball = null;
         _rb.velocity = Vector3.zero;
         _rb.angularVelocity = Vector3.zero;
-        this._animController.IdleAnimPlay();    // Idle Anim
+        _currentState = AIPlayerState.Idle;
+        _teams.isTheBallFree = true;
+        _teams.isTheBallInTeamA = -1;
         StartCoroutine(nameof(BallFind));
     }
     public void PlayerToBallWaiting()
@@ -529,7 +556,9 @@ public class AIController : MonoBehaviour
         _isWaiting = true;
         _rb.velocity = Vector3.zero;
         _rb.angularVelocity = Vector3.zero;
-        this._animController.IdleAnimPlay();    // Idle Anim
+        _currentState = AIPlayerState.Idle;
+        _teams.isTheBallFree = false;
+        _teams.isTheBallInTeamA = 1;
         StartCoroutine(nameof(PlayerÝsWaiting));
     }
     IEnumerator PlayerÝsWaiting()
@@ -537,6 +566,24 @@ public class AIController : MonoBehaviour
         // Hareket etmek için bekle
         yield return new WaitForSeconds(_waitingDuration);
         _isWaiting = false;
+
+        _currentState = AIPlayerState.Attack;
+
+        if (this._playerTeam == AIPlayerTeam.Team.ATeam)
+        {
+            foreach (GameObject player in _teamA)
+            {
+                player.GetComponent<AIController>().CurrentState = AIController.AIPlayerState.Attack;
+            }
+        }
+        else if (this._playerTeam == AIPlayerTeam.Team.BTeam)
+        {
+            foreach (GameObject player in _teamB)
+            {
+                player.GetComponent<AIController>().CurrentState = AIController.AIPlayerState.Attack;
+            }
+        }
+
     }
     IEnumerator BallFind()
     {
@@ -615,6 +662,7 @@ public class AIController : MonoBehaviour
     {
         Idle,
         FreeMove,
+        PositionMove,
         CatchTheBall,
         Defense,
         Attack,

@@ -9,6 +9,14 @@ public class AIPlayerTeam : MonoBehaviour
         ATeam,
         BTeam
     }
+    public enum PlayerPosition
+    {
+        Goalkeeper,
+        Defense,
+        Midfielder,
+        Striker
+    }
 
     public Team playerTeam;
+    public PlayerPosition playerPosition;
 }
